@@ -29,11 +29,11 @@
 static int timerlimit,  entry_time, execution_time, isr_time;
 static int pwm_on_time_wheel1 =0,pwm_on_time_wheel2=0, pwm_on_time_idle=0,pwm_on_time_max=0,pwm_on_time_min=0;
 static int pwm_on_time_1 =0, pwm_on_time_2=0;
-
+static int val1=0,val2=0,val3=0;
 static int kp=1,kd=3;
 static int proportional_cntl_1=0,differential_cntl_1=0,integral_cntl_1=0;
 static int proportional_cntl_2=0,differential_cntl_2=0,integral_cntl_2=0;
-
+static int int_time=0;
 static float ki=0.01;
 static int sys_time_seconds=0;
 static int tdoa1[10], tdoa2[10];
@@ -42,7 +42,11 @@ static int tdoa2_error=0, tdoa2_last_error=0;
 static int tdoa1_cmd=0, tdoa2_cmd=0, tdoa1_threshold=0;
 static struct pt pt_display,  pt_timer;
 char buffer[50];
-
+static float speed_sound =344;
+static float mic_distance =0.16;
+static float theta=0;
+static float theta1=0;
+#define MAX_DELAY 450
 void printLine(int line_number, char* print_buffer, short text_color, short back_color){
     // line number 0 to 31 
     /// !!! assumes tft_setRotation(0);
@@ -57,20 +61,13 @@ void printLine(int line_number, char* print_buffer, short text_color, short back
     tft_writeString(print_buffer);
 }
 
-static int time1, time2, time3, time12,time23,time31;
+static int time=0, time1=0, time2=0, time3=0, time12=0,time23=0,time31=0;
 
 static PT_THREAD (protothread_display(struct pt *pt))
 {
      PT_BEGIN(pt);
   
-    sprintf(buffer,"Proportional gain= %d", kp);
-    printLine(0, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    sprintf(buffer,"Integral gain= %6.4f", ki);
-    printLine(2, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    sprintf(buffer,"Differential gain= %d", kd);
-    printLine(4, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    sprintf(buffer,"ISR TIME= %d", isr_time);
-    printLine(6, buffer, ILI9340_WHITE, ILI9340_BLUE);
+  
     sprintf(buffer,"time1 = %d", time1);
     printLine(8, buffer, ILI9340_WHITE, ILI9340_BLUE);
     sprintf(buffer,"time2 = %d", time2);
@@ -85,11 +82,11 @@ static PT_THREAD (protothread_display(struct pt *pt))
     printLine(18, buffer, ILI9340_WHITE, ILI9340_BLUE);
     sprintf(buffer,"theta = %6.3f", theta);
     printLine(20, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    sprintf(buffer,"thet1 = %6.3f", theta1);
+    sprintf(buffer,"theta1 = %6.3f", theta1);
     printLine(22, buffer, ILI9340_WHITE, ILI9340_BLUE);
     sprintf(buffer,"sys time = %d", sys_time_seconds);
     printLine(24, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    PT_YIELD_TIME_msec(100) ;
+    PT_YIELD_TIME_msec(1000) ;
   
     PT_END(pt);
 
@@ -103,7 +100,8 @@ static PT_THREAD (protothread_timer(struct pt *pt))
    
         PT_YIELD_TIME_msec(1000) ;
         sys_time_seconds++ ;
-    
+     //  if(int_time-sys_time_seconds>2)
+      //   INTEnable(INT_IC4,1);
 
       //  tft_fillScreen(ILI9340_BLACK);
     
@@ -113,15 +111,8 @@ static PT_THREAD (protothread_timer(struct pt *pt))
 }
 
 //**************Interrupt Service Routine****************
-static float speed_sound =344;
-static float mic_distance =0.16;
-static float theta=0;
-static float theta1=0;
 
-void __ISR(_TIMER_2_VECTOR, ipl2) Timer2Handler(void){
-entry_time= ReadTimer2();                  // time required to enter the ISR
-mT2ClearIntFlag();                                 // clear the interrupt flag
-     //code for calculating PID values
+void calculate(){
 
 time12=time1-time2;
 time23=time2-time3;
@@ -129,12 +120,15 @@ time31=time3-time1;
 
 if(time3<=time1 && time3<=time2){
     if(time1<time2){
+       
         time =time23*1.6;
+        if(time<MAX_DELAY)
         theta= 60 +  ((float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
     }
     else{
-        time =-time13*1.6;
+        time =-time31*1.6;
+        if(time<MAX_DELAY)
         theta= - ((float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
         
@@ -143,11 +137,13 @@ if(time3<=time1 && time3<=time2){
 else if(time2<=time1 && time2<=time3){
     if(time1<time3){
         time =-time23*1.6;
+        if(time<MAX_DELAY)
         theta= 60+ ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
     }
     else{
         time =time12*1.6;
+        if(time<MAX_DELAY)
         theta= ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
     
@@ -157,11 +153,13 @@ else if(time2<=time1 && time2<=time3){
 else if(time1<=time2 && time1<=time3){
     if(time2<time3){
         time =time31*1.6;
+        if(time<MAX_DELAY)
         theta= - ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
     }
     else{
         time =-time12*1.6;
+        if(time<MAX_DELAY)
         theta= ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
     
@@ -171,10 +169,10 @@ else if(time1<=time2 && time1<=time3){
                 
 }
     
-    
-            theta1= ( (float) asin ( (double) (( time12 * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+    if(time12*1.6<MAX_DELAY && time12*1.6>-MAX_DELAY)
+            theta1= ( (float) asin ( (double) (( time12 * 1.6*(float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
 
-    
+
     
    // SetDCOC3PWM(pwm_on_time_wheel1);
    // SetDCOC2PWM(pwm_on_time_wheel2);
@@ -182,33 +180,74 @@ else if(time1<=time2 && time1<=time3){
     SetDCOC2PWM(timerlimit-pwm_on_time_min);
 
 
-execution_time = ReadTimer2() ; //  execution time for ISR
-isr_time= entry_time+ execution_time;
+
      
 } // end ISR TIMER2
-void __ISR(_EXTERNAL_3_VECTOR, ipl7) INT3Interrupt() 
-{  //
+/*
+
+void __ISR(_EXTERNAL_4_VECTOR, ipl7) INT4Interrupt() 
+{    mINT4ClearIntFlag();  
+    INTEnable(INT_INT4,0);
 //   WriteTimer3(0x000);
-    mINT3ClearIntFlag(); 
-   delay_ms(20);
-   
-} 
-void __ISR(_INPUT_CAPTURE_1_VECTOR, ipl3) C1Handler(void)
-{
+  
+ 
+      
     // read the capture register 
+   
+       //  mIC4ReadCapture();
+
+   // CloseCapture5();
+//delay_ms(20);
+WriteTimer3(0x000);   
+val1=0;
+val2=0;
+val3=0;
+int_time=sys_time_seconds;
+INTEnable(INT_IC1,1);
+INTEnable(INT_IC2,1);
+INTEnable(INT_IC5,1);
+
+
+} 
+ */
+ 
+void __ISR(_INPUT_CAPTURE_1_VECTOR, ipl3) C1Handler(void)
+{      mIC1ClearIntFlag();
+    INTEnable(INT_IC1,0);
+    // read the capture register 
+   if(val1==0){ 
     time1 = mIC1ReadCapture();
-      mIC1ClearIntFlag();
     CloseCapture1();
+      val1=1;
+   }
+    if(1){
+    //if(val1 && val2 && val3){
+        delay_ms(20);
+           INTEnable(INT_IC4,1);
+          calculate();
+          
+      }
+   
     // clear the timer interrupt flag
   
 }
 
 void __ISR(_INPUT_CAPTURE_2_VECTOR, ipl4) C2Handler(void)
-{
+{     mIC2ClearIntFlag();
+
+    INTEnable(INT_IC2,0);
     // read the capture register 
+       if(val2==0){ 
     time2 = mIC2ReadCapture();
-     mIC2ClearIntFlag();
     CloseCapture2();
+     val2=1;
+       }
+      if(val1 && val2 && val3){
+          delay_ms(20);
+           INTEnable(INT_IC4,1);
+          calculate();
+          
+      }
 
     // clear the timer interrupt flag
    
@@ -216,38 +255,48 @@ void __ISR(_INPUT_CAPTURE_2_VECTOR, ipl4) C2Handler(void)
 
 
 void __ISR(_INPUT_CAPTURE_5_VECTOR, ipl5) C5Handler(void)
-{       
+{     mIC5ClearIntFlag();
+  
+    INTEnable(INT_IC5,0);
     // read the capture register 
+      if(val3==0){ 
     time3 = mIC5ReadCapture();
-     mIC5ClearIntFlag();
     CloseCapture5();
+     val3=1;
+      }
+  if(val1 && val2 && val3){
+       delay_ms(20);
+           INTEnable(INT_IC4,1);
+          calculate();
+          
+      }
 
     // clear the timer interrupt flag
    
 }
 
-void __ISR(_INPUT_CAPTURE_4_VECTOR, ipl2) C4Handler(void)
-{       
+void __ISR(_INPUT_CAPTURE_4_VECTOR, ipl6) C4Handler(void)
+{  mIC4ClearIntFlag();
+    INTEnable(INT_IC4,0);
+      
     // read the capture register 
-     mIC4ClearIntFlag();
+   
          mIC4ReadCapture();
 
-   // CloseCapture5();
-delay_ms(10);
+   // 
+  
+         delay_ms(100);
 WriteTimer3(0x000);   
+     val1=0;
+val2=0;
+val3=0; 
+int_time=sys_time_seconds;
 OpenCapture1(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
 OpenCapture2(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
 OpenCapture5(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
-ConfigIntCapture1(IC_INT_ON | IC_INT_PRIOR_1 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC1);
-    
-ConfigIntCapture2(IC_INT_ON | IC_INT_PRIOR_2 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC2);
-    
-ConfigIntCapture5(IC_INT_ON | IC_INT_PRIOR_3 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC5);
-    // clear the timer interrupt flag
-
+INTEnable(INT_IC1,1);
+INTEnable(INT_IC2,1);
+INTEnable(INT_IC5,1);
 
 }
 void main(){
@@ -258,6 +307,9 @@ void main(){
   // turns OFF UART support and debugger pin, unless defines are set
   PT_setup();
 
+    
+
+  
   // === setup system wide interrupts  ========
 INTEnableSystemMultiVectoredInt();
 timerlimit = SYS_FREQ* PWM_Period/256000;
@@ -270,7 +322,7 @@ OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_256, timerlimit);
 OpenTimer3(T3_ON | T3_SOURCE_INT | T3_PS_1_64, 0xffff);
 
     // Need ISR to compute PID controller 
-ConfigIntTimer2(T2_INT_ON | T2_INT_PRIOR_2);     // set up compare3 for PWM mode 
+//ConfigIntTimer2(T2_INT_ON | T2_INT_PRIOR_2);     // set up compare3 for PWM mode 
 OpenOC3(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , pwm_on_time_wheel1, pwm_on_time_wheel1);
 OpenOC2(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , pwm_on_time_wheel2, pwm_on_time_wheel2);
 // OC3 is PPS group 4, map to RPB9 (pin 18) 
@@ -285,28 +337,38 @@ PPSOutput(2, RPB8, OC2);
 PPSInput(3, IC1, RPA4);
 PPSInput(4, IC2, RPA3);
 PPSInput(3, IC5, RPA2);
-//PPSInput(2, INT3, RPA1);
+//PPSInput(1, INT4, RPB3);
 PPSInput(1, IC4, RPB3);
+  // init the display
 
-//ConfigINT3(EXT_INT_PRI_7 | FALLING_EDGE_INT | EXT_INT_ENABLE);
 OpenCapture4(  IC_EVERY_FALL_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
-ConfigIntCapture4(IC_INT_ON | IC_INT_PRIOR_4 | IC_INT_SUB_PRIOR_3 );
+ConfigIntCapture4(IC_INT_ON | IC_INT_PRIOR_6 | IC_INT_SUB_PRIOR_3 );
 INTClearFlag(INT_IC4);
 
     
-  PT_INIT(&pt_timer);
-  PT_INIT(&pt_display);
+ConfigIntCapture1(IC_INT_OFF | IC_INT_PRIOR_3 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC1);
     
-  // init the display
+ConfigIntCapture2(IC_INT_OFF | IC_INT_PRIOR_4 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC2);
+    
+ConfigIntCapture5(IC_INT_OFF | IC_INT_PRIOR_5 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC5);
+    // clear the timer interrupt flag
+
+//ConfigINT4(EXT_INT_PRI_7 | RISING_EDGE_INT | EXT_INT_ENABLE);
+//INTClearFlag(INT_INT4);
   tft_init_hw();
   tft_begin();
   tft_fillScreen(ILI9340_BLACK);
+   PT_INIT(&pt_timer);
+  PT_INIT(&pt_display);
   
-
 while (1){
       PT_SCHEDULE(protothread_timer(&pt_timer));
       PT_SCHEDULE(protothread_display(&pt_display));
     
   }
     
+}
 }
