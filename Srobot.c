@@ -57,7 +57,7 @@ void printLine(int line_number, char* print_buffer, short text_color, short back
     tft_writeString(print_buffer);
 }
 
-static int time1, time2, time3, time12,time13;
+static int time1, time2, time3, time12,time23,time31;
 
 static PT_THREAD (protothread_display(struct pt *pt))
 {
@@ -79,10 +79,16 @@ static PT_THREAD (protothread_display(struct pt *pt))
     printLine(12, buffer, ILI9340_WHITE, ILI9340_BLUE);
     sprintf(buffer,"time12 = %d", time12);
     printLine(14, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    sprintf(buffer,"time13 = %d", time13);
+    sprintf(buffer,"time23 = %d", time23);
     printLine(16, buffer, ILI9340_WHITE, ILI9340_BLUE);
-    sprintf(buffer,"sys time = %d", sys_time_seconds);
+    sprintf(buffer,"time31 = %d", time31);
     printLine(18, buffer, ILI9340_WHITE, ILI9340_BLUE);
+    sprintf(buffer,"theta = %6.3f", theta);
+    printLine(20, buffer, ILI9340_WHITE, ILI9340_BLUE);
+    sprintf(buffer,"thet1 = %6.3f", theta1);
+    printLine(22, buffer, ILI9340_WHITE, ILI9340_BLUE);
+    sprintf(buffer,"sys time = %d", sys_time_seconds);
+    printLine(24, buffer, ILI9340_WHITE, ILI9340_BLUE);
     PT_YIELD_TIME_msec(100) ;
   
     PT_END(pt);
@@ -107,6 +113,10 @@ static PT_THREAD (protothread_timer(struct pt *pt))
 }
 
 //**************Interrupt Service Routine****************
+static float speed_sound =344;
+static float mic_distance =0.16;
+static float theta=0;
+static float theta1=0;
 
 void __ISR(_TIMER_2_VECTOR, ipl2) Timer2Handler(void){
 entry_time= ReadTimer2();                  // time required to enter the ISR
@@ -114,66 +124,57 @@ mT2ClearIntFlag();                                 // clear the interrupt flag
      //code for calculating PID values
 
 time12=time1-time2;
-time13=time1-time3;
-   
-     int i;
-    for(i=9;i>0;i--){
-        tdoa1[i]=tdoa1[i-1];
-        tdoa2[i]=tdoa2[i-1];
+time23=time2-time3;
+time31=time3-time1;
 
+if(time3<=time1 && time3<=time2){
+    if(time1<time2){
+        time =time23*1.6;
+        theta= 60 +  ((float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+        
     }
-    tdoa1[0]=time12;
-    tdoa2[0]=time13;
-
-    
-    tdoa1_last_error = tdoa1_error;
-    tdoa1_error = tdoa1_cmd - tdoa1[0];
-    
-    tdoa2_last_error = tdoa2_error;
-    tdoa2_error = tdoa2_cmd - tdoa2[0];
-
-    
-
-    
-
-    if(tdoa1_error>tdoa1_threshold){
-            proportional_cntl_1 = kp * tdoa1_error ;
-            differential_cntl_1 = kd * (tdoa1_error - tdoa1_last_error); 
-            integral_cntl_1 = integral_cntl_1 + tdoa1_error ;
-            
-            if((tdoa1_error<0 && tdoa1_last_error>0) ||(tdoa1_error>0 && tdoa1_last_error<0))
-                    integral_cntl_1=90*integral_cntl_1/100;
-
-            pwm_on_time_1 =  proportional_cntl_1 + differential_cntl_1 + ki * integral_cntl_1 ;
-            pwm_on_time_wheel1=pwm_on_time_idle + pwm_on_time_1;
-            pwm_on_time_wheel2=pwm_on_time_idle + pwm_on_time_1;
-
-    }
-    
     else{
-            proportional_cntl_2 = kp * tdoa2_error ;
-            differential_cntl_2 = kd * (tdoa2_error - tdoa2_last_error); 
-            integral_cntl_2 = integral_cntl_2 + tdoa2_error ;
-            
-            if((tdoa2_error<0 && tdoa2_last_error>0) ||(tdoa2_error>0 && tdoa2_last_error<0))
-                    integral_cntl_2=90*integral_cntl_2/100;
-            
-            pwm_on_time_2 =  proportional_cntl_2 + differential_cntl_2 + ki * integral_cntl_2 ;
-            pwm_on_time_wheel1=pwm_on_time_idle + pwm_on_time_1;
-            pwm_on_time_wheel2=pwm_on_time_idle - pwm_on_time_1;
+        time =-time13*1.6;
+        theta= - ((float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+        
         
     }
-    
-    if(pwm_on_time_wheel1<pwm_on_time_min)
-        pwm_on_time_wheel1=pwm_on_time_min;
-    else if(pwm_on_time_wheel1>pwm_on_time_max)
-        pwm_on_time_wheel1=pwm_on_time_max;
-
+}
+else if(time2<=time1 && time2<=time3){
+    if(time1<time3){
+        time =-time23*1.6;
+        theta= 60+ ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
         
-    if(pwm_on_time_wheel2<pwm_on_time_min)
-        pwm_on_time_wheel2=pwm_on_time_min;
-    else if(pwm_on_time_wheel2>pwm_on_time_max)
-        pwm_on_time_wheel2=pwm_on_time_max;
+    }
+    else{
+        time =time12*1.6;
+        theta= ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+        
+    
+}
+            }
+
+else if(time1<=time2 && time1<=time3){
+    if(time2<time3){
+        time =time31*1.6;
+        theta= - ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+        
+    }
+    else{
+        time =-time12*1.6;
+        theta= ( (float) asin ( (double) (( time * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+        
+    
+}
+                
+                
+                
+}
+    
+    
+            theta1= ( (float) asin ( (double) (( time12 * (float) speed_sound ) / ( (float) mic_distance * (float) 1000000)) ) * ( (float) 180 / 3.14 ));
+
+    
     
    // SetDCOC3PWM(pwm_on_time_wheel1);
    // SetDCOC2PWM(pwm_on_time_wheel2);
@@ -197,7 +198,7 @@ void __ISR(_INPUT_CAPTURE_1_VECTOR, ipl3) C1Handler(void)
     // read the capture register 
     time1 = mIC1ReadCapture();
       mIC1ClearIntFlag();
-  //  CloseCapture1();
+    CloseCapture1();
     // clear the timer interrupt flag
   
 }
@@ -207,7 +208,7 @@ void __ISR(_INPUT_CAPTURE_2_VECTOR, ipl4) C2Handler(void)
     // read the capture register 
     time2 = mIC2ReadCapture();
      mIC2ClearIntFlag();
-   // CloseCapture2();
+    CloseCapture2();
 
     // clear the timer interrupt flag
    
@@ -219,7 +220,7 @@ void __ISR(_INPUT_CAPTURE_5_VECTOR, ipl5) C5Handler(void)
     // read the capture register 
     time3 = mIC5ReadCapture();
      mIC5ClearIntFlag();
-   // CloseCapture5();
+    CloseCapture5();
 
     // clear the timer interrupt flag
    
@@ -232,9 +233,22 @@ void __ISR(_INPUT_CAPTURE_4_VECTOR, ipl2) C4Handler(void)
          mIC4ReadCapture();
 
    // CloseCapture5();
-//WriteTimer3(0x000);
+delay_ms(10);
+WriteTimer3(0x000);   
+OpenCapture1(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
+OpenCapture2(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
+OpenCapture5(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
+ConfigIntCapture1(IC_INT_ON | IC_INT_PRIOR_1 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC1);
+    
+ConfigIntCapture2(IC_INT_ON | IC_INT_PRIOR_2 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC2);
+    
+ConfigIntCapture5(IC_INT_ON | IC_INT_PRIOR_3 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC5);
     // clear the timer interrupt flag
-   
+
+
 }
 void main(){
 
@@ -253,7 +267,7 @@ pwm_on_time_min=1.3*SYS_FREQ/256000;
 tdoa1_threshold=SYS_FREQ/100000;
 
 OpenTimer2(T2_ON | T2_SOURCE_INT | T2_PS_1_256, timerlimit);
-OpenTimer3(T3_ON | T3_SOURCE_INT | T3_PS_1_1, 0xffff);
+OpenTimer3(T3_ON | T3_SOURCE_INT | T3_PS_1_64, 0xffff);
 
     // Need ISR to compute PID controller 
 ConfigIntTimer2(T2_INT_ON | T2_INT_PRIOR_2);     // set up compare3 for PWM mode 
@@ -263,20 +277,8 @@ OpenOC2(OC_ON | OC_TIMER2_SRC | OC_PWM_FAULT_PIN_DISABLE , pwm_on_time_wheel2, p
 PPSOutput(4, RPB9, OC3);// disconnect port expander
 PPSOutput(2, RPB8, OC2);
 
-OpenCapture1(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
-   OpenCapture2(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
-   OpenCapture5(  IC_EVERY_RISE_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
-    OpenCapture4(  IC_EVERY_FALL_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
-   ConfigIntCapture1(IC_INT_ON | IC_INT_PRIOR_1 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC1);
-    
-ConfigIntCapture2(IC_INT_ON | IC_INT_PRIOR_2 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC2);
-    
-ConfigIntCapture5(IC_INT_ON | IC_INT_PRIOR_3 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC5);
-ConfigIntCapture4(IC_INT_ON | IC_INT_PRIOR_4 | IC_INT_SUB_PRIOR_3 );
-INTClearFlag(INT_IC4);
+
+
   // turn on the interrupt so that every capture can be recorded
 
   // connect PIN 24 to IC1 capture unit
@@ -287,13 +289,10 @@ PPSInput(3, IC5, RPA2);
 PPSInput(1, IC4, RPB3);
 
 //ConfigINT3(EXT_INT_PRI_7 | FALLING_EDGE_INT | EXT_INT_ENABLE);
+OpenCapture4(  IC_EVERY_FALL_EDGE | IC_INT_1CAPTURE | IC_TIMER3_SRC | IC_ON );
+ConfigIntCapture4(IC_INT_ON | IC_INT_PRIOR_4 | IC_INT_SUB_PRIOR_3 );
+INTClearFlag(INT_IC4);
 
-int k;
-    for(k=0;k<10;k++){
-        tdoa1[k]=0;
-        tdoa2[k]=0;
-    }
-    
     
   PT_INIT(&pt_timer);
   PT_INIT(&pt_display);
